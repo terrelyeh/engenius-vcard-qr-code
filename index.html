@@ -505,15 +505,21 @@
     }
     if (!result.fullName && nameCandidates.length) result.fullName = nameCandidates[0];
 
-    // Title & Org heuristic: lines after name that are short and not phone/email/address
-    const nameIdx = result.fullName ? lines.indexOf(result.fullName) : -1;
-    const candidateLines = lines.slice(nameIdx + 1).filter(l =>
-      l.length <= 60 && !emailRx.test(l) && !/^\+?[\d\s\-\(\)]{7,}$/.test(l)
-      && !/^https?/i.test(l) && !/^www\./i.test(l)
-    );
+    // Org: scan the entire card for a line with a known company suffix
+    const orgSuffixRx = /\b(?:Inc\.?|Ltd\.?|Corp\.?|LLC|GmbH|B\.V\.|Pte\.?|S\.A\.|Technolog|Networks?|Solutions?|Systems?|Group|Holdings?)\b/i;
+    const orgLine = lines.find(l => l.length <= 60 && orgSuffixRx.test(l) && !emailRx.test(l));
+    if (orgLine) result.org = orgLine;
 
-    if (candidateLines[0] && !result.title) result.title = candidateLines[0];
-    if (candidateLines[1] && !result.org) result.org = candidateLines[1];
+    // Title: check line immediately before name first (cards often put title above name),
+    // then fall back to first valid line after name
+    const nameIdx = result.fullName ? lines.indexOf(result.fullName) : -1;
+    const titleFilter = l => l.length <= 40 && !emailRx.test(l) && !/\d{5,}/.test(l)
+      && !/^(?:https?|www)/i.test(l) && !/[,@]/.test(l)
+      && l !== result.fullName && l !== result.org;
+    const lineBefore = nameIdx > 0 ? lines[nameIdx - 1] : null;
+    const afterTitle = lines.slice(nameIdx + 1).find(titleFilter);
+    if (lineBefore && titleFilter(lineBefore)) result.title = lineBefore;
+    else if (afterTitle) result.title = afterTitle;
 
     // Address: line with digits + word pattern suggesting address
     const addrRx = /\d+[\w\s,.\-\/]+(?:St|Ave|Rd|Blvd|Lane|Ln|Dr|Way|Ct|Pl|Str|丁目|番|号|階|路|街|區|市|縣|省)[^\n]*/i;
