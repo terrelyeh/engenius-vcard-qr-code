@@ -65,16 +65,46 @@
     .panel-title { font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 7px; }
 
     /* Profile Selector */
-    .profile-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+    .profile-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .profile-btn-wrap { flex: 1; min-width: 80px; display: flex; border-radius: 7px; border: 1px solid var(--border); overflow: hidden; background: var(--surface2); transition: border-color .15s; }
+    .profile-btn-wrap:hover { border-color: var(--border-hover); }
+    .profile-btn-wrap.active { border-color: var(--accent); background: var(--accent); }
     .profile-btn {
-      flex: 1; min-width: 72px; padding: 8px 10px; border-radius: 7px;
-      border: 1px solid var(--border); background: var(--surface2);
+      flex: 1; padding: 8px 6px 8px 10px; border: none; background: transparent;
       color: var(--muted); font-family: 'Inter', sans-serif;
       font-size: .78rem; font-weight: 600; cursor: pointer; text-align: center;
-      transition: border-color .15s, color .15s, background .15s;
+      transition: color .15s;
     }
-    .profile-btn:hover { border-color: var(--border-hover); color: var(--text); background: #fff; }
-    .profile-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .profile-btn-wrap:hover .profile-btn { color: var(--text); }
+    .profile-btn-wrap.active .profile-btn { color: #fff; }
+    .profile-edit-btn {
+      padding: 0 8px; border: none; border-left: 1px solid rgba(0,0,0,.07);
+      background: transparent; cursor: pointer; color: var(--muted);
+      font-size: .72rem; transition: color .15s, background .15s;
+      display: flex; align-items: center;
+    }
+    .profile-edit-btn:hover { color: var(--accent); background: rgba(37,99,235,.06); }
+    .profile-btn-wrap.active .profile-edit-btn { border-left-color: rgba(255,255,255,.25); color: rgba(255,255,255,.8); }
+    .profile-btn-wrap.active .profile-edit-btn:hover { color: #fff; background: rgba(255,255,255,.15); }
+    .profile-btn-wrap.editing { border-color: var(--accent); }
+
+    /* Profile Editor */
+    #profile-editor {
+      display: none; margin-bottom: 16px;
+      background: #F0F6FF; border: 1px solid var(--accent-border);
+      border-radius: 9px; padding: 14px 16px;
+    }
+    .editor-title {
+      font-size: .7rem; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 12px;
+    }
+    .editor-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 480px) { .editor-fields { grid-template-columns: 1fr; } }
+    .editor-fields .field { margin-top: 0 !important; }
+    .editor-btn-row { display: flex; gap: 7px; margin-top: 12px; }
+    .btn-save { background: var(--accent); color: #fff; font-size: .8rem; padding: 7px 16px; }
+    .btn-save:hover { background: var(--accent-hover); }
+    .btn-cancel { font-size: .8rem; padding: 7px 14px; }
 
     /* Section label */
     .section-label { font-size: .68rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 20px 0 10px; padding-bottom: 5px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
@@ -152,10 +182,37 @@
 
     <!-- Profile Buttons -->
     <div class="profile-bar">
-      <button class="profile-btn" data-profile="US" onclick="applyProfile('US')">🇺🇸 US</button>
-      <button class="profile-btn" data-profile="APAC" onclick="applyProfile('APAC')">🌏 APAC</button>
-      <button class="profile-btn" data-profile="Europe" onclick="applyProfile('Europe')">🇪🇺 Europe</button>
-      <button class="profile-btn" data-profile="Japan" onclick="applyProfile('Japan')">🇯🇵 Japan</button>
+      <div class="profile-btn-wrap" data-profile="US">
+        <button class="profile-btn" onclick="applyProfile('US')">🇺🇸 US</button>
+        <button class="profile-edit-btn" onclick="toggleEdit('US')" title="編輯預設值">✏</button>
+      </div>
+      <div class="profile-btn-wrap" data-profile="APAC">
+        <button class="profile-btn" onclick="applyProfile('APAC')">🌏 APAC</button>
+        <button class="profile-edit-btn" onclick="toggleEdit('APAC')" title="編輯預設值">✏</button>
+      </div>
+      <div class="profile-btn-wrap" data-profile="Europe">
+        <button class="profile-btn" onclick="applyProfile('Europe')">🇪🇺 Europe</button>
+        <button class="profile-edit-btn" onclick="toggleEdit('Europe')" title="編輯預設值">✏</button>
+      </div>
+      <div class="profile-btn-wrap" data-profile="Japan">
+        <button class="profile-btn" onclick="applyProfile('Japan')">🇯🇵 Japan</button>
+        <button class="profile-edit-btn" onclick="toggleEdit('Japan')" title="編輯預設值">✏</button>
+      </div>
+    </div>
+
+    <!-- Profile Editor -->
+    <div id="profile-editor">
+      <div class="editor-title">編輯 <span id="editor-profile-name"></span> Profile 預設值</div>
+      <div class="editor-fields">
+        <div class="field"><label for="edit-org">公司名稱</label><input id="edit-org" type="text" /></div>
+        <div class="field"><label for="edit-phoneWork">公司電話</label><input id="edit-phoneWork" type="tel" /></div>
+        <div class="field"><label for="edit-website">網站</label><input id="edit-website" type="url" /></div>
+        <div class="field" style="grid-column:1/-1"><label for="edit-address">地址</label><input id="edit-address" type="text" /></div>
+      </div>
+      <div class="editor-btn-row">
+        <button class="btn btn-save" onclick="saveProfile()">儲存</button>
+        <button class="btn btn-outline btn-cancel" onclick="closeEditor()">取消</button>
+      </div>
     </div>
 
     <!-- Form Fields -->
@@ -229,6 +286,15 @@
 <script>
   let currentVCard = '';
   let activeProfile = null;
+  let activeEditKey = null;
+
+  // ── Load saved profiles from localStorage ──
+  function loadProfiles() {
+    try {
+      const saved = localStorage.getItem('engenius_profiles');
+      if (saved) Object.assign(PROFILES, JSON.parse(saved));
+    } catch (e) {}
+  }
 
   // ── Profile Data ──
   const PROFILES = {
@@ -258,10 +324,52 @@
     },
   };
 
+  // ── Profile Editor ──
+  function toggleEdit(key) {
+    const editor = document.getElementById('profile-editor');
+    // Toggle off if same key
+    if (activeEditKey === key && editor.style.display !== 'none') {
+      closeEditor(); return;
+    }
+    activeEditKey = key;
+    // Update editing highlight
+    document.querySelectorAll('.profile-btn-wrap').forEach(w => w.classList.remove('editing'));
+    document.querySelector(`.profile-btn-wrap[data-profile="${key}"]`).classList.add('editing');
+    // Populate fields
+    const p = PROFILES[key];
+    document.getElementById('editor-profile-name').textContent = key;
+    document.getElementById('edit-org').value = p.org || '';
+    document.getElementById('edit-phoneWork').value = p.phoneWork || '';
+    document.getElementById('edit-website').value = p.website || '';
+    document.getElementById('edit-address').value = p.address || '';
+    editor.style.display = 'block';
+    editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function saveProfile() {
+    if (!activeEditKey) return;
+    PROFILES[activeEditKey] = {
+      org:       document.getElementById('edit-org').value.trim(),
+      phoneWork: document.getElementById('edit-phoneWork').value.trim(),
+      website:   document.getElementById('edit-website').value.trim(),
+      address:   document.getElementById('edit-address').value.trim(),
+    };
+    try { localStorage.setItem('engenius_profiles', JSON.stringify(PROFILES)); } catch (e) {}
+    // Re-apply if this profile is currently active
+    if (activeProfile === activeEditKey) applyProfile(activeEditKey);
+    closeEditor();
+  }
+
+  function closeEditor() {
+    document.getElementById('profile-editor').style.display = 'none';
+    document.querySelectorAll('.profile-btn-wrap').forEach(w => w.classList.remove('editing'));
+    activeEditKey = null;
+  }
+
   function applyProfile(key) {
     activeProfile = key;
-    document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector(`[data-profile="${key}"]`).classList.add('active');
+    document.querySelectorAll('.profile-btn-wrap').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.profile-btn-wrap[data-profile="${key}"]`).classList.add('active');
 
     const p = PROFILES[key];
     const setField = (id, val) => {
@@ -399,12 +507,16 @@
   function clearAll() {
     document.querySelectorAll('input').forEach(el => { el.value = ''; el.classList.remove('autofilled'); });
     currentVCard = '';
-    document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.profile-btn-wrap').forEach(b => b.classList.remove('active'));
     activeProfile = null;
+    closeEditor();
     document.getElementById('qr-placeholder').style.display = 'flex';
     document.getElementById('qr-output').classList.remove('visible');
     document.getElementById('vcard-preview').classList.remove('visible');
   }
+
+  // Init
+  loadProfiles();
 </script>
 </body>
 </html>
