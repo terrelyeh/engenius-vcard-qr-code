@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>vCard QR Code 產生器</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>
+    // Suppress the harmless "fake worker" fallback warning
+    const _warn = console.warn.bind(console);
+    console.warn = function(...a) {
+      if (a[0] && String(a[0]).includes('fake worker')) return;
+      _warn(...a);
+    };
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #F4F4F5;
+      --surface: #FFFFFF;
+      --surface2: #FAFAFA;
+      --border: #E4E4E7;
+      --border-hover: #A1A1AA;
+      --accent: #2563EB;
+      --accent-hover: #1D4ED8;
+      --accent-light: #EFF6FF;
+      --accent-border: #BFDBFE;
+      --text: #18181B;
+      --muted: #71717A;
+      --success: #16A34A;
+      --success-bg: #F0FDF4;
+      --success-border: #BBF7D0;
+      --warn: #D97706;
+      --warn-bg: #FFFBEB;
+      --warn-border: #FDE68A;
+      --focus: #2563EB;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 16px 60px;
+      background-color: #EEF0F3;
+      background-image:
+        linear-gradient(rgba(37,99,235,.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37,99,235,.055) 1px, transparent 1px);
+      background-size: 28px 28px;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 75% -5%, rgba(37,99,235,.10) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 40% at 10% 100%, rgba(99,102,241,.07) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .container, header { position: relative; z-index: 1; }
+
+    /* Header */
+    header { text-align: center; margin-bottom: 32px; }
+    header h1 { font-size: clamp(1.4rem, 3.5vw, 1.9rem); font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+    header p { color: var(--muted); font-size: .875rem; margin-top: 6px; }
+
+    /* Layout */
+    .container { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+    @media (max-width: 760px) { .container { grid-template-columns: 1fr; } }
+
+    /* Panel */
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .panel-title { font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 7px; }
+
+    /* Profile Selector */
+    .profile-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+    .profile-btn {
+      flex: 1; min-width: 72px; padding: 8px 10px; border-radius: 7px;
+      border: 1px solid var(--border); background: var(--surface2);
+      color: var(--muted); font-family: 'Inter', sans-serif;
+      font-size: .78rem; font-weight: 600; cursor: pointer; text-align: center;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .profile-btn:hover { border-color: var(--border-hover); color: var(--text); background: #fff; }
+    .profile-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* Scan Zone */
+    .scan-zone {
+      border: 1.5px dashed var(--border); border-radius: 9px; padding: 18px;
+      text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+      margin-bottom: 18px; background: var(--surface2);
+    }
+    .scan-zone:hover, .scan-zone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+    .scan-zone-inner { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+    .scan-icon { width: 36px; height: 36px; background: var(--accent-light); border: 1px solid var(--accent-border); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+    .scan-title { font-size: .875rem; font-weight: 600; color: var(--text); }
+    .scan-sub { font-size: .75rem; color: var(--muted); }
+    #scan-input { display: none; }
+
+    /* Scan status */
+    .scan-status { display: none; align-items: center; gap: 10px; border-radius: 8px; padding: 11px 13px; margin-bottom: 14px; font-size: .8rem; }
+    .scan-status.visible { display: flex; }
+    .scan-status.processing { background: #F0F9FF; border: 1px solid #BAE6FD; color: #0369A1; }
+    .scan-status.done { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success); }
+    .scan-status.error { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn); }
+    .spin { animation: spin .8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress-bar-wrap { flex: 1; background: #E0F2FE; border-radius: 10px; height: 4px; overflow: hidden; }
+    .progress-bar { height: 100%; background: #0EA5E9; border-radius: 10px; transition: width .3s; }
+
+    /* Section label */
+    .section-label { font-size: .68rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 20px 0 10px; padding-bottom: 5px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
+    .section-label::before { content: ''; display: inline-block; width: 3px; height: 11px; background: var(--accent); border-radius: 2px; flex-shrink: 0; }
+
+    /* Form */
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field + .field { margin-top: 10px; }
+    .row .field + .field { margin-top: 0; }
+    label { font-size: .73rem; font-weight: 500; color: var(--muted); }
+    input {
+      background: #fff; border: 1px solid var(--border); border-radius: 7px;
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: .875rem;
+      padding: 9px 11px; transition: border-color .15s, box-shadow .15s;
+      width: 100%; outline: none;
+    }
+    input:hover { border-color: var(--border-hover); }
+    input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+    input::placeholder { color: #C4C4CA; }
+    input.autofilled { border-color: var(--success); background: var(--success-bg); }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 7px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: .85rem; font-weight: 600; padding: 10px 18px; transition: background .15s, color .15s, border-color .15s; }
+    .btn:active { opacity: .85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-outline { background: #fff; border: 1px solid var(--border); color: var(--muted); }
+    .btn-outline:hover { border-color: var(--border-hover); color: var(--text); }
+
+    /* QR Panel */
+    .qr-panel { position: sticky; top: 22px; }
+    #qr-placeholder { background: var(--surface2); border: 1.5px dashed var(--border); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; gap: 10px; color: var(--muted); font-size: .82rem; text-align: center; padding: 20px; }
+    #qr-output { display: none; flex-direction: column; align-items: center; gap: 14px; }
+    #qr-output.visible { display: flex; }
+    #qr-canvas-wrap { background: #fff; border-radius: 10px; padding: 14px; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.07); display: inline-block; }
+    #qr-canvas-wrap canvas { display: block; }
+    #qr-name { font-size: .95rem; font-weight: 700; text-align: center; color: var(--text); }
+    #qr-company { font-size: .77rem; color: var(--muted); text-align: center; margin-top: -8px; }
+    .dl-row { display: flex; gap: 7px; width: 100%; justify-content: center; }
+    .btn-dl { flex: 1; justify-content: center; max-width: 130px; font-size: .78rem; padding: 8px 10px; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); border-radius: 20px; font-size: .68rem; font-weight: 600; padding: 3px 10px; }
+    .badge-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+
+    /* vCard preview */
+    #vcard-preview { display: none; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: .68rem; font-family: 'Courier New', monospace; color: #52525B; line-height: 1.7; white-space: pre; overflow-x: auto; max-height: 160px; overflow-y: auto; margin-top: 10px; }
+    #vcard-preview.visible { display: block; }
+    .toggle-preview { background: none; border: none; color: var(--muted); font-size: .72rem; cursor: pointer; padding: 0; margin-top: 8px; text-decoration: underline; font-family: 'Inter', sans-serif; }
+    .toggle-preview:hover { color: var(--text); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>vCard QR Code 產生器</h1>
+  <p>選擇公司 Profile，或掃描名片自動填入，即時產生 vCard QR Code</p>
+</header>
+
+<div class="container">
+
+  <!-- LEFT: Form -->
+  <div class="panel">
+    <div class="panel-title">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      公司 Profile
+    </div>
+
+    <!-- Profile Buttons -->
+    <div class="profile-bar">
+      <button class="profile-btn" data-profile="US" onclick="applyProfile('US')">🇺🇸 US</button>
+      <button class="profile-btn" data-profile="APAC" onclick="applyProfile('APAC')">🌏 APAC</button>
+      <button class="profile-btn" data-profile="Europe" onclick="applyProfile('Europe')">🇪🇺 Europe</button>
+      <button class="profile-btn" data-profile="Japan" onclick="applyProfile('Japan')">🇯🇵 Japan</button>
+    </div>
+
+    <!-- Scan Zone -->
+    <div class="panel-title" style="margin-bottom:10px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M3 15v3a2 2 0 0 0 2 2h3M15 20h3a2 2 0 0 0 2-2v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+      名片掃描（選填）
+    </div>
+    <div class="scan-zone" id="scan-zone"
+         onclick="document.getElementById('scan-input').click()"
+         ondragover="handleDragOver(event)"
+         ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event)">
+      <div class="scan-zone-inner">
+        <div class="scan-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="scan-title">上傳名片圖片或 PDF</div>
+        <div class="scan-sub">支援 JPG · PNG · PDF · 拖曳或點擊上傳</div>
+      </div>
+    </div>
+    <input type="file" id="scan-input" accept="image/*,.pdf" onchange="handleScanFile(this)" />
+
+    <!-- Scan Status -->
+    <div class="scan-status" id="scan-status">
+      <span id="scan-icon-wrap"></span>
+      <div style="flex:1">
+        <div id="scan-msg" style="font-size:.82rem;font-weight:500;margin-bottom:4px"></div>
+        <div class="progress-bar-wrap" id="progress-wrap" style="display:none">
+          <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form Fields -->
+    <div class="section-label">基本資訊</div>
+    <div class="field"><label for="fullName">姓名</label><input id="fullName" type="text" placeholder="葉 Terrel" oninput="liveUpdate()" /></div>
+    <div class="row" style="margin-top:10px">
+      <div class="field"><label for="org">公司 / 組織</label><input id="org" type="text" placeholder="EnGenius Technologies Inc." oninput="liveUpdate()" /></div>
+      <div class="field"><label for="title">職稱</label><input id="title" type="text" placeholder="Product Manager" oninput="liveUpdate()" /></div>
+    </div>
+
+    <div class="section-label">聯絡方式</div>
+    <div class="row">
+      <div class="field"><label for="phoneMobile">手機</label><input id="phoneMobile" type="tel" placeholder="+886 912 345 678" oninput="liveUpdate()" /></div>
+      <div class="field"><label for="phoneWork">公司電話</label><input id="phoneWork" type="tel" placeholder="+1 714 432 8668" oninput="liveUpdate()" /></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field"><label for="emailWork">Email</label><input id="emailWork" type="email" placeholder="you@engeniustech.com" oninput="liveUpdate()" /></div>
+      <div class="field"><label for="website">網站</label><input id="website" type="url" placeholder="https://www.engeniustech.com" oninput="liveUpdate()" /></div>
+    </div>
+
+    <div class="section-label">地址</div>
+    <div class="field"><label for="address">地址</label><input id="address" type="text" placeholder="1580 Scenic Ave. Costa Mesa, CA 92626" oninput="liveUpdate()" /></div>
+
+    <!-- Buttons -->
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="generateQR()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h.01M14 18h.01M18 14h.01M18 18h.01"/></svg>
+        產生 QR Code
+      </button>
+      <button class="btn btn-outline" onclick="clearAll()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.81"/></svg>
+        清除
+      </button>
+    </div>
+  </div>
+
+  <!-- RIGHT: QR Output -->
+  <div class="panel qr-panel">
+    <div class="panel-title">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h.01M14 18h.01M18 14h.01M18 18h.01"/></svg>
+      QR Code 預覽
+    </div>
+
+    <div id="qr-placeholder">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D4D4D8" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h.01M14 18h.01M18 14h.01M18 18h.01"/></svg>
+      <span>選擇 Profile 並填入資訊後<br>點擊「產生 QR Code」</span>
+    </div>
+
+    <div id="qr-output">
+      <div id="qr-name"></div>
+      <div id="qr-company"></div>
+      <div id="qr-canvas-wrap"><div id="qr-canvas"></div></div>
+      <div class="badge"><span class="badge-dot"></span>vCard 3.0</div>
+      <div class="dl-row">
+        <button class="btn btn-primary btn-dl" onclick="downloadQR()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          下載 PNG
+        </button>
+        <button class="btn btn-outline btn-dl" onclick="downloadVCard()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          下載 .vcf
+        </button>
+      </div>
+      <button class="toggle-preview" onclick="togglePreview()">▾ 查看 vCard 原始碼</button>
+      <pre id="vcard-preview"></pre>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const CMAP_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/';
+  const CMAP_PACKED = true;
+
+  let currentVCard = '';
+  let activeProfile = null;
+
+  // ── Profile Data ──
+  const PROFILES = {
+    US: {
+      org: 'EnGenius Technologies Inc.',
+      phoneWork: '',
+      website: 'https://www.engeniustech.com',
+      address: '1580 Scenic Ave. Costa Mesa, CA 92626'
+    },
+    APAC: {
+      org: 'EnGenius Networks Singapore Pte Ltd',
+      phoneWork: '+65 6227-1088',
+      website: 'https://www.engeniustech.com',
+      address: '215 Henderson Road #01-04 Henderson Industrial Park Singapore 159554'
+    },
+    Europe: {
+      org: 'EnGenius Networks Europe B.V.',
+      phoneWork: '+31 40 8200 888',
+      website: 'https://www.engeniustech.com',
+      address: 'Fellenoord 180, 5611 ZB Eindhoven, NL'
+    },
+    Japan: {
+      org: 'EnGenius Networks Japan 株式会社',
+      phoneWork: '03-6809-6608',
+      website: 'https://www.engeniustech.com',
+      address: '108-0023 東京都港区芝浦三丁目6番14号 Expert Tamachi10階'
+    },
+  };
+
+  function applyProfile(key) {
+    activeProfile = key;
+    // Update button styles
+    document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`[data-profile="${key}"]`).classList.add('active');
+
+    const p = PROFILES[key];
+    const setField = (id, val) => {
+      const el = document.getElementById(id);
+      el.value = val || '';
+      if (val) el.classList.add('autofilled');
+      else el.classList.remove('autofilled');
+    };
+
+    setField('org', p.org);
+    setField('phoneWork', p.phoneWork);
+    setField('website', p.website);
+    setField('address', p.address);
+
+    // Trigger live update if QR already visible
+    liveUpdate();
+  }
+
+  // ── Drag & Drop ──
+  function handleDragOver(e) {
+    e.preventDefault();
+    document.getElementById('scan-zone').classList.add('drag-over');
+  }
+  function handleDragLeave(e) {
+    document.getElementById('scan-zone').classList.remove('drag-over');
+  }
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('scan-zone').classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }
+  function handleScanFile(input) {
+    const file = input.files[0];
+    if (file) processFile(file);
+  }
+
+  // ── File Processing ──
+  async function processFile(file) {
+    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    showScanStatus('processing', isPDF ? '正在解析 PDF…' : '正在辨識名片文字…', true);
+
+    try {
+      let text = '';
+      if (isPDF) {
+        text = await extractPDFText(file);
+      } else {
+        text = await runOCR(file);
+      }
+      if (!text.trim()) throw new Error('無法辨識任何文字');
+      const fields = parseContact(text);
+      fillFields(fields);
+      const count = Object.values(fields).filter(Boolean).length;
+      showScanStatus('done', `✓ 已辨識並填入 ${count} 個欄位`);
+    } catch (err) {
+      showScanStatus('error', `⚠ ${err.message || '辨識失敗，請手動填入'}`);
+    }
+  }
+
+  // ── PDF Text Extraction ──
+  async function extractPDFText(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      cMapUrl: CMAP_URL,
+      cMapPacked: CMAP_PACKED
+    }).promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      fullText += content.items.map(item => item.str).join(' ') + '\n';
+    }
+    return fullText;
+  }
+
+  // ── OCR ──
+  async function runOCR(file) {
+    setProgress(10);
+    const worker = await Tesseract.createWorker('eng', 1, {
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/worker.min.js',
+      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.4/tesseract-core.wasm.js',
+      logger: m => {
+        if (m.status === 'recognizing text') setProgress(10 + m.progress * 85);
+      }
+    });
+    setProgress(30);
+    const { data: { text } } = await worker.recognize(file);
+    await worker.terminate();
+    setProgress(100);
+    return text;
+  }
+
+  // ── Smart Contact Parser ──
+  function parseContact(text) {
+    const result = {};
+    const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 1);
+
+    // Email
+    const emailRx = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
+    const emailMatch = text.match(emailRx);
+    if (emailMatch) result.emailWork = emailMatch[0];
+
+    // Website – skip emails, prefer lines starting with www/http
+    const urlRx = /(?:https?:\/\/)?(?:www\.[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/gi;
+    const urls = [...text.matchAll(urlRx)].map(m => m[0]).filter(u => !u.includes('@'));
+    if (urls.length) result.website = urls[0].startsWith('http') ? urls[0] : 'https://' + urls[0];
+
+    // Phone numbers
+    const phoneRx = /(?:\+?[\d][\d\s\-\.\(\)]{6,18}[\d])/g;
+    const phones = [...text.matchAll(phoneRx)]
+      .map(m => m[0].trim())
+      .filter(p => p.replace(/\D/g, '').length >= 7 && p.replace(/\D/g, '').length <= 15);
+    if (phones[0]) result.phoneMobile = phones[0];
+    if (phones[1] && phones[1] !== phones[0]) result.phoneWork = phones[1];
+
+    // Name heuristic: first short line (<=40 chars) that's not email/phone/url and has letters
+    for (const line of lines) {
+      if (line.length > 40) continue;
+      if (emailRx.test(line)) continue;
+      if (/\d{5,}/.test(line)) continue;   // likely phone or zip
+      if (/^(?:https?|www)/i.test(line)) continue;
+      if (/[,@]/.test(line)) continue;
+      if (/[a-zA-Z\u4e00-\u9fff]/.test(line)) { result.fullName = line; break; }
+    }
+
+    // Title & Org heuristic: lines after name that are short and not phone/email/address
+    const nameIdx = result.fullName ? lines.indexOf(result.fullName) : -1;
+    const candidateLines = lines.slice(nameIdx + 1).filter(l =>
+      l.length <= 60 && !emailRx.test(l) && !/^\+?[\d\s\-\(\)]{7,}$/.test(l)
+      && !/^https?/i.test(l) && !/^www\./i.test(l)
+    );
+
+    if (candidateLines[0] && !result.title) result.title = candidateLines[0];
+    if (candidateLines[1] && !result.org) result.org = candidateLines[1];
+
+    // Address: line with digits + word pattern suggesting address
+    const addrRx = /\d+[\w\s,.\-\/]+(?:St|Ave|Rd|Blvd|Lane|Ln|Dr|Way|Ct|Pl|Str|丁目|番|号|階|路|街|區|市|縣|省)[^\n]*/i;
+    const addrMatch = text.match(addrRx);
+    if (addrMatch) result.address = addrMatch[0].trim();
+
+    return result;
+  }
+
+  // ── Fill Detected Fields ──
+  function fillFields(fields) {
+    const map = {
+      fullName: 'fullName', title: 'title', org: 'org',
+      phoneMobile: 'phoneMobile', phoneWork: 'phoneWork',
+      emailWork: 'emailWork', website: 'website', address: 'address'
+    };
+    Object.entries(map).forEach(([key, id]) => {
+      if (fields[key]) {
+        const el = document.getElementById(id);
+        el.value = fields[key];
+        el.classList.add('autofilled');
+        setTimeout(() => el.classList.remove('autofilled'), 3000);
+      }
+    });
+    liveUpdate();
+  }
+
+  // ── Scan Status UI ──
+  function showScanStatus(type, msg, withProgress = false) {
+    const el = document.getElementById('scan-status');
+    const msgEl = document.getElementById('scan-msg');
+    const iconWrap = document.getElementById('scan-icon-wrap');
+    const progressWrap = document.getElementById('progress-wrap');
+
+    el.className = `scan-status visible ${type}`;
+    msgEl.textContent = msg;
+
+    if (type === 'processing') {
+      iconWrap.innerHTML = `<span class="spin">⟳</span>`;
+      progressWrap.style.display = withProgress ? 'block' : 'none';
+      if (withProgress) document.getElementById('progress-bar').style.width = '5%';
+    } else {
+      iconWrap.innerHTML = type === 'done' ? '✓' : '⚠';
+      progressWrap.style.display = 'none';
+    }
+  }
+
+  function setProgress(pct) {
+    const bar = document.getElementById('progress-bar');
+    if (bar) bar.style.width = pct + '%';
+  }
+
+  // ── Build vCard ──
+  function buildVCard() {
+    const g = id => document.getElementById(id).value.trim();
+    const fullName  = g('fullName');
+    const org       = g('org');
+    const title_    = g('title');
+    const phoneMob  = g('phoneMobile');
+    const phoneWork = g('phoneWork');
+    const emailWork = g('emailWork');
+    const address   = g('address');
+    const website   = g('website');
+
+    if (!fullName && !org) return null;
+
+    const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+    lines.push(`FN:${fullName || org}`);
+    lines.push(`N:;;;${fullName};`);
+    if (org)       lines.push(`ORG:${org}`);
+    if (title_)    lines.push(`TITLE:${title_}`);
+    if (phoneMob)  lines.push(`TEL;TYPE=CELL:${phoneMob}`);
+    if (phoneWork) lines.push(`TEL;TYPE=WORK,VOICE:${phoneWork}`);
+    if (emailWork) lines.push(`EMAIL;TYPE=WORK:${emailWork}`);
+    if (address)   lines.push(`ADR;TYPE=WORK:;;${address};;;;`);
+    if (website)   lines.push(`URL:${website}`);
+    lines.push('END:VCARD');
+    return lines.join('\n');
+  }
+
+  // ── Generate QR ──
+  function generateQR() {
+    const vcard = buildVCard();
+    if (!vcard) { alert('請至少填入姓名或公司名稱'); return; }
+    currentVCard = vcard;
+
+    const g = id => document.getElementById(id).value.trim();
+    const fullName = g('fullName'), org = g('org'), title_ = g('title');
+    document.getElementById('qr-name').textContent = fullName || org;
+    document.getElementById('qr-company').textContent =
+      (fullName && org) ? `${title_ ? title_ + ' · ' : ''}${org}` : '';
+
+    const wrap = document.getElementById('qr-canvas');
+    wrap.innerHTML = '';
+    const size = vcard.length > 600 ? 200 : 220;
+    new QRCode(wrap, { text: vcard, width: size, height: size, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+    document.getElementById('vcard-preview').textContent = vcard;
+
+    document.getElementById('qr-placeholder').style.display = 'none';
+    document.getElementById('qr-output').classList.add('visible');
+  }
+
+  // ── Live Update ──
+  let debTimer;
+  function liveUpdate() {
+    clearTimeout(debTimer);
+    debTimer = setTimeout(() => {
+      if (document.getElementById('qr-output').classList.contains('visible')) generateQR();
+    }, 600);
+  }
+
+  // ── Download PNG ──
+  function downloadQR() {
+    // qrcodejs hides the canvas and shows an <img> — grab whichever has data
+    const img    = document.querySelector('#qr-canvas img');
+    const canvas = document.querySelector('#qr-canvas canvas');
+
+    const pad = 22;
+    const out = document.createElement('canvas');
+    const ctx = out.getContext('2d');
+
+    const done = (dataUrl) => {
+      const name = (document.getElementById('fullName').value || document.getElementById('org').value || 'contact')
+        .trim().replace(/\s+/g, '_');
+      const link = document.createElement('a');
+      link.download = `vcard_${name}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    if (img && img.src && img.src.startsWith('data:')) {
+      // Use the img data-URL, redraw with white padding
+      const i = new Image();
+      i.onload = () => {
+        out.width = i.width + pad * 2; out.height = i.height + pad * 2;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
+        ctx.drawImage(i, pad, pad);
+        done(out.toDataURL('image/png'));
+      };
+      i.src = img.src;
+    } else if (canvas && canvas.width) {
+      out.width = canvas.width + pad * 2; out.height = canvas.height + pad * 2;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(canvas, pad, pad);
+      done(out.toDataURL('image/png'));
+    }
+  }
+
+  // ── Download .vcf ──
+  function downloadVCard() {
+    if (!currentVCard) return;
+    const blob = new Blob([currentVCard], { type: 'text/vcard;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const name = (document.getElementById('fullName').value || document.getElementById('org').value || 'contact').trim().replace(/\s+/g, '_');
+    link.download = `${name}.vcf`;
+    link.href = url; link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Toggle vCard Preview ──
+  function togglePreview() {
+    const el = document.getElementById('vcard-preview');
+    const btn = document.querySelector('.toggle-preview');
+    el.classList.toggle('visible');
+    btn.textContent = el.classList.contains('visible') ? '▴ 隱藏 vCard 原始碼' : '▾ 查看 vCard 原始碼';
+  }
+
+  // ── Clear All ──
+  function clearAll() {
+    document.querySelectorAll('input').forEach(el => { el.value = ''; el.classList.remove('autofilled'); });
+    currentVCard = '';
+    document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('active'));
+    activeProfile = null;
+    document.getElementById('qr-placeholder').style.display = 'flex';
+    document.getElementById('qr-output').classList.remove('visible');
+    document.getElementById('vcard-preview').classList.remove('visible');
+    document.getElementById('scan-status').className = 'scan-status';
+    document.getElementById('scan-input').value = '';
+  }
+</script>
+</body>
+</html>
