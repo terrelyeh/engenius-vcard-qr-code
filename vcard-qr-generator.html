@@ -371,6 +371,7 @@
   function handleScanFile(input) {
     const file = input.files[0];
     if (file) processFile(file);
+    input.value = '';
   }
 
   // ── File Processing ──
@@ -415,7 +416,7 @@
   // ── OCR ──
   async function runOCR(file) {
     setProgress(10);
-    const worker = await Tesseract.createWorker('eng', 1, {
+    const worker = await Tesseract.createWorker(['eng', 'chi_tra'], 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/worker.min.js',
       langPath: 'https://tessdata.projectnaptha.com/4.0.0',
       corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.4/tesseract-core.wasm.js',
@@ -424,10 +425,13 @@
       }
     });
     setProgress(30);
-    const { data: { text } } = await worker.recognize(file);
-    await worker.terminate();
-    setProgress(100);
-    return text;
+    try {
+      const { data: { text } } = await worker.recognize(file);
+      setProgress(100);
+      return text;
+    } finally {
+      await worker.terminate();
+    }
   }
 
   // ── Smart Contact Parser ──
@@ -540,7 +544,7 @@
 
     const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
     lines.push(`FN:${fullName || org}`);
-    lines.push(`N:;;;${fullName};`);
+    lines.push(`N:${fullName};;;;`);
     if (org)       lines.push(`ORG:${org}`);
     if (title_)    lines.push(`TITLE:${title_}`);
     if (phoneMob)  lines.push(`TEL;TYPE=CELL:${phoneMob}`);
