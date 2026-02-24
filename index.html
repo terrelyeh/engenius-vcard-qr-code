@@ -6,18 +6,6 @@
   <title>vCard QR Code 產生器</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script>
-    // Suppress the harmless "fake worker" fallback warning
-    const _warn = console.warn.bind(console);
-    console.warn = function(...a) {
-      if (a[0] && String(a[0]).includes('fake worker')) return;
-      _warn(...a);
-    };
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -35,9 +23,6 @@
       --success: #16A34A;
       --success-bg: #F0FDF4;
       --success-border: #BBF7D0;
-      --warn: #D97706;
-      --warn-bg: #FFFBEB;
-      --warn-border: #FDE68A;
       --focus: #2563EB;
       --radius: 10px;
     }
@@ -90,30 +75,6 @@
     }
     .profile-btn:hover { border-color: var(--border-hover); color: var(--text); background: #fff; }
     .profile-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-
-    /* Scan Zone */
-    .scan-zone {
-      border: 1.5px dashed var(--border); border-radius: 9px; padding: 18px;
-      text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
-      margin-bottom: 18px; background: var(--surface2);
-    }
-    .scan-zone:hover, .scan-zone.drag-over { border-color: var(--accent); background: var(--accent-light); }
-    .scan-zone-inner { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
-    .scan-icon { width: 36px; height: 36px; background: var(--accent-light); border: 1px solid var(--accent-border); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-    .scan-title { font-size: .875rem; font-weight: 600; color: var(--text); }
-    .scan-sub { font-size: .75rem; color: var(--muted); }
-    #scan-input { display: none; }
-
-    /* Scan status */
-    .scan-status { display: none; align-items: center; gap: 10px; border-radius: 8px; padding: 11px 13px; margin-bottom: 14px; font-size: .8rem; }
-    .scan-status.visible { display: flex; }
-    .scan-status.processing { background: #F0F9FF; border: 1px solid #BAE6FD; color: #0369A1; }
-    .scan-status.done { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success); }
-    .scan-status.error { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn); }
-    .spin { animation: spin .8s linear infinite; display: inline-block; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .progress-bar-wrap { flex: 1; background: #E0F2FE; border-radius: 10px; height: 4px; overflow: hidden; }
-    .progress-bar { height: 100%; background: #0EA5E9; border-radius: 10px; transition: width .3s; }
 
     /* Section label */
     .section-label { font-size: .68rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 20px 0 10px; padding-bottom: 5px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
@@ -177,7 +138,7 @@
 
 <header>
   <h1>vCard QR Code 產生器</h1>
-  <p>選擇公司 Profile，或掃描名片自動填入，即時產生 vCard QR Code</p>
+  <p>選擇公司 Profile，填入聯絡資訊，即時產生 vCard QR Code</p>
 </header>
 
 <div class="container">
@@ -195,37 +156,6 @@
       <button class="profile-btn" data-profile="APAC" onclick="applyProfile('APAC')">🌏 APAC</button>
       <button class="profile-btn" data-profile="Europe" onclick="applyProfile('Europe')">🇪🇺 Europe</button>
       <button class="profile-btn" data-profile="Japan" onclick="applyProfile('Japan')">🇯🇵 Japan</button>
-    </div>
-
-    <!-- Scan Zone -->
-    <div class="panel-title" style="margin-bottom:10px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M3 15v3a2 2 0 0 0 2 2h3M15 20h3a2 2 0 0 0 2-2v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
-      名片掃描（選填）
-    </div>
-    <div class="scan-zone" id="scan-zone"
-         onclick="document.getElementById('scan-input').click()"
-         ondragover="handleDragOver(event)"
-         ondragleave="handleDragLeave(event)"
-         ondrop="handleDrop(event)">
-      <div class="scan-zone-inner">
-        <div class="scan-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </div>
-        <div class="scan-title">上傳名片圖片或 PDF</div>
-        <div class="scan-sub">支援 JPG · PNG · PDF · 拖曳或點擊上傳</div>
-      </div>
-    </div>
-    <input type="file" id="scan-input" accept="image/*,.pdf" onchange="handleScanFile(this)" />
-
-    <!-- Scan Status -->
-    <div class="scan-status" id="scan-status">
-      <span id="scan-icon-wrap"></span>
-      <div style="flex:1">
-        <div id="scan-msg" style="font-size:.82rem;font-weight:500;margin-bottom:4px"></div>
-        <div class="progress-bar-wrap" id="progress-wrap" style="display:none">
-          <div class="progress-bar" id="progress-bar" style="width:0%"></div>
-        </div>
-      </div>
     </div>
 
     <!-- Form Fields -->
@@ -297,9 +227,6 @@
 </div>
 
 <script>
-  const CMAP_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/';
-  const CMAP_PACKED = true;
-
   let currentVCard = '';
   let activeProfile = null;
 
@@ -333,7 +260,6 @@
 
   function applyProfile(key) {
     activeProfile = key;
-    // Update button styles
     document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`[data-profile="${key}"]`).classList.add('active');
 
@@ -350,233 +276,7 @@
     setField('website', p.website);
     setField('address', p.address);
 
-    // Trigger live update if QR already visible
     liveUpdate();
-  }
-
-  // ── Drag & Drop ──
-  function handleDragOver(e) {
-    e.preventDefault();
-    document.getElementById('scan-zone').classList.add('drag-over');
-  }
-  function handleDragLeave(e) {
-    document.getElementById('scan-zone').classList.remove('drag-over');
-  }
-  function handleDrop(e) {
-    e.preventDefault();
-    document.getElementById('scan-zone').classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) processFile(file);
-  }
-  function handleScanFile(input) {
-    const file = input.files[0];
-    if (file) processFile(file);
-    input.value = '';
-  }
-
-  // ── File Processing ──
-  async function processFile(file) {
-    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    showScanStatus('processing', isPDF ? '正在解析 PDF…' : '正在辨識名片文字…', true);
-
-    try {
-      let text = '';
-      if (isPDF) {
-        text = await extractPDFText(file);
-      } else {
-        text = await runOCR(file);
-      }
-      if (!text.trim()) throw new Error('無法辨識任何文字');
-      const fields = parseContact(text);
-      fillFields(fields);
-      const count = Object.values(fields).filter(Boolean).length;
-      showScanStatus('done', `✓ 已辨識並填入 ${count} 個欄位`);
-    } catch (err) {
-      showScanStatus('error', `⚠ ${err.message || '辨識失敗，請手動填入'}`);
-    }
-  }
-
-  // ── PDF Text Extraction ──
-  async function extractPDFText(file) {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({
-      data: arrayBuffer,
-      cMapUrl: CMAP_URL,
-      cMapPacked: CMAP_PACKED
-    }).promise;
-    let fullText = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      // Group items by Y coordinate (rounded) to reconstruct line breaks.
-      // PDF Y-axis is bottom-up, so sort descending to get top-to-bottom order.
-      const lineMap = new Map();
-      for (const item of content.items) {
-        if (!item.str.trim()) continue;
-        const y = Math.round(item.transform[5]);
-        if (!lineMap.has(y)) lineMap.set(y, []);
-        lineMap.get(y).push({ x: item.transform[4], str: item.str });
-      }
-      const pageLines = [...lineMap.entries()]
-        .sort(([a], [b]) => b - a)
-        .map(([, items]) => items.sort((a, b) => a.x - b.x).map(i => i.str).join(' '));
-      fullText += pageLines.join('\n') + '\n\n';
-    }
-    return fullText;
-  }
-
-  // ── EXIF Orientation Correction ──
-  // Browsers auto-apply EXIF rotation when rendering <img>, but Tesseract reads
-  // raw pixels. Drawing to canvas captures the corrected image for OCR.
-  function correctOrientation(file) {
-    return new Promise(resolve => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      const cleanup = () => URL.revokeObjectURL(url);
-      img.onerror = () => { cleanup(); resolve(file); }; // fallback: use original
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          canvas.getContext('2d').drawImage(img, 0, 0);
-          cleanup();
-          canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', 0.95);
-        } catch (e) {
-          cleanup();
-          resolve(file); // fallback: use original
-        }
-      };
-      img.src = url;
-    });
-  }
-
-  // ── OCR ──
-  async function runOCR(file) {
-    setProgress(10);
-    const corrected = await correctOrientation(file);
-    const worker = await Tesseract.createWorker(['eng', 'chi_tra'], 1, {
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/worker.min.js',
-      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.4/tesseract-core.wasm.js',
-      logger: m => {
-        if (m.status === 'recognizing text') setProgress(10 + m.progress * 85);
-      }
-    });
-    setProgress(30);
-    try {
-      const { data: { text } } = await worker.recognize(corrected);
-      setProgress(100);
-      return text;
-    } finally {
-      await worker.terminate();
-    }
-  }
-
-  // ── Smart Contact Parser ──
-  function parseContact(text) {
-    const result = {};
-    const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 1);
-
-    // Email
-    const emailRx = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
-    const emailMatch = text.match(emailRx);
-    if (emailMatch) result.emailWork = emailMatch[0];
-
-    // Website – skip emails, prefer lines starting with www/http
-    const urlRx = /(?:https?:\/\/)?(?:www\.[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/gi;
-    const urls = [...text.matchAll(urlRx)].map(m => m[0]).filter(u => !u.includes('@'));
-    if (urls.length) result.website = urls[0].startsWith('http') ? urls[0] : 'https://' + urls[0];
-
-    // Phone numbers — use [ \-\.\(\)] not \s to avoid matching across newlines
-    const phoneRx = /(?:\+?[\d][\d \-\.\(\)]{6,18}[\d])/g;
-    const phones = [...text.matchAll(phoneRx)]
-      .map(m => m[0].trim())
-      .filter(p => p.replace(/\D/g, '').length >= 7 && p.replace(/\D/g, '').length <= 15);
-    if (phones[0]) result.phoneMobile = phones[0];
-    if (phones[1] && phones[1] !== phones[0]) result.phoneWork = phones[1];
-
-    // Name heuristic: prefer a line that matches email local-part components,
-    // then fall back to first short non-email/phone/url line
-    const nameCandidates = lines.filter(l =>
-      l.length <= 40 && !emailRx.test(l) && !/\d{5,}/.test(l)
-      && !/^(?:https?|www)/i.test(l) && !/[,@]/.test(l)
-      && /[a-zA-Z\u4e00-\u9fff]/.test(l)
-    );
-    if (result.emailWork) {
-      const localParts = result.emailWork.split('@')[0].split(/[.\-_]/).filter(p => p.length > 1);
-      const emailMatch_ = nameCandidates.find(l =>
-        localParts.every(p => l.toLowerCase().includes(p.toLowerCase()))
-      );
-      if (emailMatch_) result.fullName = emailMatch_;
-    }
-    if (!result.fullName && nameCandidates.length) result.fullName = nameCandidates[0];
-
-    // Org: scan the entire card for a line with a known company suffix
-    const orgSuffixRx = /\b(?:Inc\.?|Ltd\.?|Corp\.?|LLC|GmbH|B\.V\.|Pte\.?|S\.A\.|Technolog|Networks?|Solutions?|Systems?|Group|Holdings?)\b/i;
-    const orgLine = lines.find(l => l.length <= 60 && orgSuffixRx.test(l) && !emailRx.test(l));
-    if (orgLine) result.org = orgLine;
-
-    // Title: check line immediately before name first (cards often put title above name),
-    // then fall back to first valid line after name
-    const nameIdx = result.fullName ? lines.indexOf(result.fullName) : -1;
-    const titleFilter = l => l.length <= 40 && !emailRx.test(l) && !/\d{5,}/.test(l)
-      && !/^(?:https?|www)/i.test(l) && !/[,@]/.test(l)
-      && l !== result.fullName && l !== result.org;
-    const lineBefore = nameIdx > 0 ? lines[nameIdx - 1] : null;
-    const afterTitle = lines.slice(nameIdx + 1).find(titleFilter);
-    if (lineBefore && titleFilter(lineBefore)) result.title = lineBefore;
-    else if (afterTitle) result.title = afterTitle;
-
-    // Address: line with digits + word pattern suggesting address
-    const addrRx = /\d+[\w\s,.\-\/]+(?:St|Ave|Rd|Blvd|Lane|Ln|Dr|Way|Ct|Pl|Str|丁目|番|号|階|路|街|區|市|縣|省)[^\n]*/i;
-    const addrMatch = text.match(addrRx);
-    if (addrMatch) result.address = addrMatch[0].trim();
-
-    return result;
-  }
-
-  // ── Fill Detected Fields ──
-  function fillFields(fields) {
-    const map = {
-      fullName: 'fullName', title: 'title', org: 'org',
-      phoneMobile: 'phoneMobile', phoneWork: 'phoneWork',
-      emailWork: 'emailWork', website: 'website', address: 'address'
-    };
-    Object.entries(map).forEach(([key, id]) => {
-      if (fields[key]) {
-        const el = document.getElementById(id);
-        el.value = fields[key];
-        el.classList.add('autofilled');
-        setTimeout(() => el.classList.remove('autofilled'), 3000);
-      }
-    });
-    liveUpdate();
-  }
-
-  // ── Scan Status UI ──
-  function showScanStatus(type, msg, withProgress = false) {
-    const el = document.getElementById('scan-status');
-    const msgEl = document.getElementById('scan-msg');
-    const iconWrap = document.getElementById('scan-icon-wrap');
-    const progressWrap = document.getElementById('progress-wrap');
-
-    el.className = `scan-status visible ${type}`;
-    msgEl.textContent = msg;
-
-    if (type === 'processing') {
-      iconWrap.innerHTML = `<span class="spin">⟳</span>`;
-      progressWrap.style.display = withProgress ? 'block' : 'none';
-      if (withProgress) document.getElementById('progress-bar').style.width = '5%';
-    } else {
-      iconWrap.innerHTML = type === 'done' ? '✓' : '⚠';
-      progressWrap.style.display = 'none';
-    }
-  }
-
-  function setProgress(pct) {
-    const bar = document.getElementById('progress-bar');
-    if (bar) bar.style.width = pct + '%';
   }
 
   // ── Build vCard ──
@@ -640,7 +340,6 @@
 
   // ── Download PNG ──
   function downloadQR() {
-    // qrcodejs hides the canvas and shows an <img> — grab whichever has data
     const img    = document.querySelector('#qr-canvas img');
     const canvas = document.querySelector('#qr-canvas canvas');
 
@@ -660,7 +359,6 @@
     };
 
     if (img && img.src && img.src.startsWith('data:')) {
-      // Use the img data-URL, redraw with white padding
       const i = new Image();
       i.onload = () => {
         out.width = i.width + pad * 2; out.height = i.height + pad * 2;
@@ -706,8 +404,6 @@
     document.getElementById('qr-placeholder').style.display = 'flex';
     document.getElementById('qr-output').classList.remove('visible');
     document.getElementById('vcard-preview').classList.remove('visible');
-    document.getElementById('scan-status').className = 'scan-status';
-    document.getElementById('scan-input').value = '';
   }
 </script>
 </body>
