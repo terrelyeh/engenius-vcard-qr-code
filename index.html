@@ -449,23 +449,29 @@
     const urls = [...text.matchAll(urlRx)].map(m => m[0]).filter(u => !u.includes('@'));
     if (urls.length) result.website = urls[0].startsWith('http') ? urls[0] : 'https://' + urls[0];
 
-    // Phone numbers
-    const phoneRx = /(?:\+?[\d][\d\s\-\.\(\)]{6,18}[\d])/g;
+    // Phone numbers — use [ \-\.\(\)] not \s to avoid matching across newlines
+    const phoneRx = /(?:\+?[\d][\d \-\.\(\)]{6,18}[\d])/g;
     const phones = [...text.matchAll(phoneRx)]
       .map(m => m[0].trim())
       .filter(p => p.replace(/\D/g, '').length >= 7 && p.replace(/\D/g, '').length <= 15);
     if (phones[0]) result.phoneMobile = phones[0];
     if (phones[1] && phones[1] !== phones[0]) result.phoneWork = phones[1];
 
-    // Name heuristic: first short line (<=40 chars) that's not email/phone/url and has letters
-    for (const line of lines) {
-      if (line.length > 40) continue;
-      if (emailRx.test(line)) continue;
-      if (/\d{5,}/.test(line)) continue;   // likely phone or zip
-      if (/^(?:https?|www)/i.test(line)) continue;
-      if (/[,@]/.test(line)) continue;
-      if (/[a-zA-Z\u4e00-\u9fff]/.test(line)) { result.fullName = line; break; }
+    // Name heuristic: prefer a line that matches email local-part components,
+    // then fall back to first short non-email/phone/url line
+    const nameCandidates = lines.filter(l =>
+      l.length <= 40 && !emailRx.test(l) && !/\d{5,}/.test(l)
+      && !/^(?:https?|www)/i.test(l) && !/[,@]/.test(l)
+      && /[a-zA-Z\u4e00-\u9fff]/.test(l)
+    );
+    if (result.emailWork) {
+      const localParts = result.emailWork.split('@')[0].split(/[.\-_]/).filter(p => p.length > 1);
+      const emailMatch_ = nameCandidates.find(l =>
+        localParts.every(p => l.toLowerCase().includes(p.toLowerCase()))
+      );
+      if (emailMatch_) result.fullName = emailMatch_;
     }
+    if (!result.fullName && nameCandidates.length) result.fullName = nameCandidates[0];
 
     // Title & Org heuristic: lines after name that are short and not phone/email/address
     const nameIdx = result.fullName ? lines.indexOf(result.fullName) : -1;
