@@ -425,9 +425,29 @@
     return fullText;
   }
 
+  // ── EXIF Orientation Correction ──
+  // Browsers auto-apply EXIF rotation when rendering <img>, but Tesseract reads
+  // raw pixels. Drawing to canvas captures the corrected image for OCR.
+  function correctOrientation(file) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.95);
+      };
+      img.src = url;
+    });
+  }
+
   // ── OCR ──
   async function runOCR(file) {
     setProgress(10);
+    const corrected = await correctOrientation(file);
     const worker = await Tesseract.createWorker(['eng', 'chi_tra'], 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/worker.min.js',
       langPath: 'https://tessdata.projectnaptha.com/4.0.0',
@@ -438,7 +458,7 @@
     });
     setProgress(30);
     try {
-      const { data: { text } } = await worker.recognize(file);
+      const { data: { text } } = await worker.recognize(corrected);
       setProgress(100);
       return text;
     } finally {
