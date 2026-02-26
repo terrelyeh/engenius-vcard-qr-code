@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>vCard QR Code 產生器</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qr-creator/dist/qr-creator.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -476,7 +476,7 @@
     const wrap = document.getElementById('qr-canvas');
     wrap.innerHTML = '';
     const size = vcard.length > 600 ? 200 : 220;
-    new QRCode(wrap, { text: vcard, width: size, height: size, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+    QrCreator.render({ text: vcard, radius: 0, ecLevel: 'M', fill: '#000', background: '#fff', size: size }, wrap);
     document.getElementById('vcard-preview').textContent = vcard;
 
     document.getElementById('qr-placeholder').style.display = 'none';
